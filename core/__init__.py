@@ -1,0 +1,1 @@
+# QuickAccent core package
