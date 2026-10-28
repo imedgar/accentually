@@ -1,4 +1,4 @@
-' Runs QuickAccent silently in the background without any console window
+' Runs Accentually silently in the background without any console window
 Set objShell = CreateObject("WScript.Shell")
 Set objFSO = CreateObject("Scripting.FileSystemObject")
 

@@ -117,5 +117,5 @@ def inject_replacement(unicode_char: str) -> bool:
     inputs[3].ki.time = 0
     inputs[3].ki.dwExtraInfo = EXTRA_INFO_MAGIC
 
-    sent = user32.SendInput(4, ctypes.byref(inputs), ctypes.sizeof(INPUT))
+    sent = user32.SendInput(4, inputs, ctypes.sizeof(INPUT))
     return sent == 4

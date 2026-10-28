@@ -1,6 +1,6 @@
 {
   "active_profile": "latvian_only",
-  "hold_delay_ms": 350,
+  "hold_delay_ms": 380,
   "theme": "dark",
   "position_mode": "caret_or_center",
   "play_sound": false,

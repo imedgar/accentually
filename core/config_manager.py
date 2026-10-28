@@ -23,6 +23,7 @@ class ConfigManager:
             "position_mode": "caret_or_center",
             "play_sound": False,
             "auto_capitalize": True,
+            "pause_in_fullscreen": False,
             "profiles": {
                 "latvian_first": {
                     "name": "Latvian + International",
@@ -149,6 +150,15 @@ class ConfigManager:
                 cb()
             except Exception as e:
                 print(f"[ConfigManager] Listener error: {e}")
+
+    @property
+    def pause_in_fullscreen(self) -> bool:
+        return self.config.get("pause_in_fullscreen", False)
+
+    @pause_in_fullscreen.setter
+    def pause_in_fullscreen(self, enabled: bool):
+        self.config["pause_in_fullscreen"] = bool(enabled)
+        self.save()
 
     @property
     def hold_delay_ms(self) -> int:

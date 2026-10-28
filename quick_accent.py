@@ -1,5 +1,5 @@
 """
-QuickAccent - macOS-style Accent Popup for Windows
+Accentually - macOS-style Accent Popup for Windows
 Brings the beloved macOS hold-to-accent popup with 1-9 quick selection to Windows,
 with first-class out-of-the-box support for the Latvian language (ā, č, ē, ģ, ī, ķ, ļ, ņ, ō, ŗ, š, ū, ž).
 
@@ -43,7 +43,7 @@ def set_high_dpi_awareness():
             pass
 
 def acquire_single_instance_mutex():
-    """Ensure only one instance of QuickAccent runs at a time."""
+    """Ensure only one instance of Accentually runs at a time."""
     kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
     kernel32.CreateMutexW.restype = ctypes.c_void_p
     
@@ -53,7 +53,7 @@ def acquire_single_instance_mutex():
         return None
     return h_mutex
 
-class QuickAccentApp:
+class AccentuallyApp:
     def __init__(self, open_settings_on_start: bool = False):
         self.open_settings_on_start = open_settings_on_start
         
@@ -71,7 +71,7 @@ class QuickAccentApp:
         self.tray = TrayIcon(
             config_manager=self.config_manager,
             on_open_settings=self._open_settings_from_tray,
-            on_exit_app=self.exit_app
+            on_exit_app=lambda: self.root.after(0, self.exit_app)
         )
 
     def _open_settings_from_tray(self):
@@ -93,8 +93,8 @@ class QuickAccentApp:
         if self.open_settings_on_start:
             self.root.after(200, self.settings_dialog.show)
 
-        print("[QuickAccent] Running. Hold any accented key (e.g. a, c, e, g, i, k, l, n, s, u, z) to see popup.")
-        print("[QuickAccent] Press numbers 1-9 to insert the corresponding accented character.")
+        print("[Accentually] Running. Hold any accented key (e.g. a, c, e, g, i, k, l, n, s, u, z) to see popup.")
+        print("[Accentually] Press numbers 1-9 to insert the corresponding accented character.")
         
         try:
             self.root.mainloop()
@@ -102,7 +102,7 @@ class QuickAccentApp:
             self.exit_app()
 
     def exit_app(self):
-        print("[QuickAccent] Exiting application...")
+        print("[Accentually] Exiting application...")
         if self.keyboard_manager:
             self.keyboard_manager.stop()
         if self.tray:
@@ -116,11 +116,11 @@ def main():
     
     h_mutex = acquire_single_instance_mutex()
     if not h_mutex:
-        print("[QuickAccent] An instance of QuickAccent is already running.")
+        print("[Accentually] An instance of Accentually is already running.")
         sys.exit(0)
 
     open_settings = ("--settings" in sys.argv)
-    app = QuickAccentApp(open_settings_on_start=open_settings)
+    app = AccentuallyApp(open_settings_on_start=open_settings)
     app.start()
 
 if __name__ == "__main__":

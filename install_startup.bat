@@ -1,6 +1,6 @@
 @echo off
 echo ======================================================
-echo  QuickAccent - Enable Start with Windows
+echo  Accentually - Enable Start with Windows
 echo ======================================================
 cd /d "%~dp0"
 
@@ -11,7 +11,7 @@ reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "QuickAccent" /t
 
 if %ERRORLEVEL% equ 0 (
     echo.
-    echo [SUCCESS] QuickAccent has been added to Windows startup!
+    echo [SUCCESS] Accentually has been added to Windows startup!
     echo It will now run silently in the background whenever you log in.
 ) else (
     echo.

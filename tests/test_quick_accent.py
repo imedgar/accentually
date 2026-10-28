@@ -7,6 +7,7 @@ import unittest
 import sys
 import os
 import ctypes
+from unittest.mock import patch, Mock
 
 # Add project root to sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,10 +15,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.config_manager import ConfigManager
 from core.key_injector import INPUT, KEYBDINPUT, EXTRA_INFO_MAGIC
 from core.caret_detector import clamp_to_screen, get_work_area_for_point
+from core.key_injector import inject_replacement, user32
+from core.keyboard_hook import KeyboardManager, KBDLLHOOKSTRUCT, WM_KEYDOWN
 
 class TestQuickAccent(unittest.TestCase):
     def setUp(self):
         self.cm = ConfigManager()
+        self.cm.save = Mock(return_value=True)
 
     def test_latvian_characters_position_one(self):
         """Test that all 13 Latvian diacritic letters are in position #1."""
@@ -84,6 +88,29 @@ class TestQuickAccent(unittest.TestCase):
         self.assertIn("latvian_only", profiles)
         self.assertIn("international", profiles)
         self.assertIn("custom", profiles)
+
+    def test_replacement_passes_input_array_to_sendinput(self):
+        with patch('core.key_injector.ensure_desktop_access'), patch.object(user32, 'SendInput', return_value=4) as send:
+            self.assertTrue(inject_replacement('ā'))
+            events = send.call_args.args[1]
+            self.assertEqual(events[0].ki.wVk, 8)
+            self.assertEqual(events[2].ki.wScan, ord('ā'))
+
+    def test_held_key_repeat_does_not_dismiss_popup(self):
+        manager = KeyboardManager(None, Mock(pause_in_fullscreen=False), None)
+        manager.is_popup_active = True
+        manager.currently_held_vk = ord('A')
+        event = KBDLLHOOKSTRUCT(vkCode=ord('A'))
+        self.assertEqual(manager._hook_callback(0, WM_KEYDOWN, ctypes.addressof(event)), 1)
+        self.assertTrue(manager.is_popup_active)
+
+    def test_fullscreen_pause_passes_key_through(self):
+        manager = KeyboardManager(None, Mock(pause_in_fullscreen=True), None)
+        event = KBDLLHOOKSTRUCT(vkCode=ord('A'))
+        with patch('core.keyboard_hook.is_foreground_fullscreen', return_value=True), \
+             patch('core.keyboard_hook.user32.CallNextHookEx', return_value=0):
+            self.assertEqual(manager._hook_callback(0, WM_KEYDOWN, ctypes.addressof(event)), 0)
+        self.assertIsNone(manager.currently_held_vk)
 
 if __name__ == '__main__':
     unittest.main()

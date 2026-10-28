@@ -9,11 +9,12 @@ Replicates macOS accent menu:
 import ctypes
 from ctypes import wintypes
 import threading
-import time
-from typing import Optional, Callable
+import queue
+from typing import Optional
 from core.key_injector import EXTRA_INFO_MAGIC, inject_replacement
 from core.config_manager import ConfigManager
 from core.overlay_window import AccentOverlay
+from core.caret_detector import get_accessible_caret_position, is_foreground_fullscreen
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -23,6 +24,7 @@ WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
 WM_SYSKEYDOWN = 0x0104
 WM_SYSKEYUP = 0x0105
+WM_QUIT = 0x0012
 
 VK_SHIFT = 0x10
 VK_CONTROL = 0x11
@@ -46,7 +48,16 @@ class KBDLLHOOKSTRUCT(ctypes.Structure):
         ('dwExtraInfo', ctypes.c_size_t)
     ]
 
-HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+user32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
+user32.SetWindowsHookExW.restype = wintypes.HANDLE
+user32.CallNextHookEx.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM]
+user32.CallNextHookEx.restype = ctypes.c_ssize_t
+user32.UnhookWindowsHookEx.argtypes = [wintypes.HANDLE]
+user32.UnhookWindowsHookEx.restype = wintypes.BOOL
+user32.PostThreadMessageW.argtypes = [wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+user32.PostThreadMessageW.restype = wintypes.BOOL
+kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 
 class KeyboardManager:
     def __init__(self, root, config_manager: ConfigManager, overlay: AccentOverlay):
@@ -56,16 +67,30 @@ class KeyboardManager:
         
         self.hook = None
         self._hook_proc_ref = None # Prevent garbage collection
+        self._hook_thread = None
+        self._hook_thread_id = None
+        self._ready = threading.Event()
+        self._ui_queue = queue.SimpleQueue()
+        self._poll_id = None
         
         # State tracking
         self.currently_held_vk: Optional[int] = None
-        self.hold_timer: Optional[threading.Timer] = None
+        self.hold_timer = None
         self.is_popup_active: bool = False
         self.active_base_char: Optional[str] = None
         self.active_is_upper: bool = False
 
     def start(self):
         """Install global low-level keyboard hook."""
+        self._hook_thread = threading.Thread(target=self._hook_loop, daemon=True)
+        self._hook_thread.start()
+        self._ready.wait()
+        if not self.hook:
+            raise RuntimeError("Failed to install the global keyboard hook")
+        self._poll_ui_queue()
+
+    def _hook_loop(self):
+        self._hook_thread_id = kernel32.GetCurrentThreadId()
         self._hook_proc_ref = HOOKPROC(self._hook_callback)
         # In Windows WH_KEYBOARD_LL, hMod can be NULL (0)
         self.hook = user32.SetWindowsHookExW(
@@ -77,15 +102,33 @@ class KeyboardManager:
         if not self.hook:
             err = kernel32.GetLastError()
             print(f"[KeyboardManager] Failed to set hook: error {err}")
+            self._ready.set()
+            return
         else:
             print("[KeyboardManager] Global keyboard hook active.")
+        self._ready.set()
+        msg = wintypes.MSG()
+        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+            user32.TranslateMessage(ctypes.byref(msg))
+            user32.DispatchMessageW(ctypes.byref(msg))
+        user32.UnhookWindowsHookEx(self.hook)
+        self.hook = None
+
+    def _poll_ui_queue(self):
+        while not self._ui_queue.empty():
+            action, args = self._ui_queue.get()
+            action(*args)
+        self._poll_id = self.root.after(10, self._poll_ui_queue)
 
     def stop(self):
         """Unhook global keyboard hook."""
         self._cancel_timer()
-        if self.hook:
-            user32.UnhookWindowsHookEx(self.hook)
-            self.hook = None
+        if self._poll_id:
+            self.root.after_cancel(self._poll_id)
+            self._poll_id = None
+        if self._hook_thread_id:
+            user32.PostThreadMessageW(self._hook_thread_id, WM_QUIT, 0, 0)
+            self._hook_thread.join(timeout=2)
             print("[KeyboardManager] Hook uninstalled.")
 
     def _cancel_timer(self):
@@ -119,10 +162,13 @@ class KeyboardManager:
 
     def _on_hold_timeout(self, base_char: str, is_upper: bool):
         """Triggered on background timer when a key is held past threshold."""
-        # Schedule UI update on main thread
-        self.root.after(0, self._show_overlay_on_ui_thread, base_char, is_upper)
+        self._ui_queue.put((self._show_overlay_on_ui_thread, (base_char, is_upper)))
 
     def _show_overlay_on_ui_thread(self, base_char: str, is_upper: bool):
+        if self.currently_held_vk != ord(base_char.upper()):
+            return
+        if self.config_manager.pause_in_fullscreen and is_foreground_fullscreen():
+            return
         options = self.config_manager.get_mappings_for_key(base_char, is_upper)
         if not options:
             return
@@ -138,6 +184,15 @@ class KeyboardManager:
             inject_replacement(chosen_char)
 
         self.overlay.show(options, on_char_selected)
+        def locate_caret():
+            caret = get_accessible_caret_position()
+            self._ui_queue.put((move_if_current, (caret,)))
+
+        def move_if_current(caret):
+            if self.is_popup_active and self.overlay.on_select_callback is on_char_selected:
+                self.overlay.move_above_caret(caret)
+
+        threading.Thread(target=locate_caret, daemon=True).start()
 
     def _dismiss_overlay(self):
         self.is_popup_active = False
@@ -158,11 +213,21 @@ class KeyboardManager:
         is_key_up = (wParam == WM_KEYUP or wParam == WM_SYSKEYUP)
         vk = kbd.vkCode
 
+        if self.config_manager.pause_in_fullscreen and is_foreground_fullscreen():
+            self._cancel_timer()
+            self.currently_held_vk = None
+            if self.is_popup_active:
+                self.is_popup_active = False
+                self._ui_queue.put((self._dismiss_overlay, ()))
+            return user32.CallNextHookEx(None, nCode, wParam, lParam)
+
         # ---------------------------------------------------------
         # STATE A: Accent Popup is CURRENTLY ACTIVE
         # ---------------------------------------------------------
         if self.is_popup_active:
             if is_key_down:
+                if vk == self.currently_held_vk:
+                    return 1
                 # 1. Check numbers 1-9 (top row or numpad)
                 num = None
                 if 0x31 <= vk <= 0x39: # Top row '1'-'9'
@@ -172,43 +237,49 @@ class KeyboardManager:
                     
                 if num is not None:
                     # Select option by number!
-                    if self.overlay.select_number(num):
+                    if num <= len(self.config_manager.get_mappings_for_key(self.active_base_char, self.active_is_upper)):
                         self.is_popup_active = False
                         self.currently_held_vk = None
+                        self._ui_queue.put((self.overlay.select_number, (num,)))
                         return 1 # Suppress digit
 
                 # 2. Navigation: Left / Right arrow keys
                 if vk == VK_LEFT:
-                    self.overlay.select_prev()
+                    self._ui_queue.put((self.overlay.select_prev, ()))
                     return 1
                 if vk == VK_RIGHT:
-                    self.overlay.select_next()
+                    self._ui_queue.put((self.overlay.select_next, ()))
                     return 1
 
                 # 3. Confirmation: Space or Enter
                 if vk == VK_SPACE or vk == VK_RETURN:
-                    self.overlay.confirm_current()
+                    self._ui_queue.put((self.overlay.confirm_current, ()))
                     self.is_popup_active = False
                     self.currently_held_vk = None
                     return 1
 
                 # 4. Cancellation: Escape
                 if vk == VK_ESCAPE:
-                    self._dismiss_overlay()
+                    self.is_popup_active = False
+                    self._ui_queue.put((self._dismiss_overlay, ()))
                     return 1
 
                 # 5. Backspace: dismiss popup and delete the character
                 if vk == VK_BACK:
-                    self._dismiss_overlay()
+                    self.is_popup_active = False
+                    self._ui_queue.put((self._dismiss_overlay, ()))
                     return user32.CallNextHookEx(None, nCode, wParam, lParam)
 
                 # 6. Any other key: dismiss popup and let normal typing proceed
-                self._dismiss_overlay()
+                self.is_popup_active = False
+                self._ui_queue.put((self._dismiss_overlay, ()))
                 return user32.CallNextHookEx(None, nCode, wParam, lParam)
 
             elif is_key_up:
                 # When releasing the held key while popup is open:
                 # Keep the popup open so user can comfortably tap 1-9!
+                if vk == self.currently_held_vk:
+                    self.currently_held_vk = None
                 return user32.CallNextHookEx(None, nCode, wParam, lParam)
 
         # ---------------------------------------------------------
@@ -234,11 +305,9 @@ class KeyboardManager:
                     is_upper = self._get_is_upper()
                     
                     # Start hold timer (e.g. 350 ms)
-                    delay_sec = self.config_manager.hold_delay_ms / 1000.0
                     self.hold_timer = threading.Timer(
-                        delay_sec,
-                        self._on_hold_timeout,
-                        args=[base_char, is_upper]
+                        self.config_manager.hold_delay_ms / 1000,
+                        self._on_hold_timeout, args=(base_char, is_upper)
                     )
                     self.hold_timer.daemon = True
                     self.hold_timer.start()

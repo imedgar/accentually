@@ -7,7 +7,7 @@ import tkinter as tk
 import ctypes
 from ctypes import wintypes
 from typing import List, Callable, Optional
-from core.caret_detector import get_popup_position
+from core.caret_detector import get_popup_position, position_above_caret
 
 user32 = ctypes.windll.user32
 dwmapi = ctypes.windll.dwmapi
@@ -34,6 +34,12 @@ user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.GetWindowLongPtrW.restype = ctypes.c_void_p
 user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
 user32.SetWindowLongPtrW.restype = ctypes.c_void_p
+user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+user32.GetAncestor.restype = wintypes.HWND
+user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
+user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
 
 class AccentOverlay:
     def __init__(self, root: tk.Tk):
@@ -126,7 +132,7 @@ class AccentOverlay:
         total_height = self.padding * 2 + self.card_height + 2
         
         x, y = get_popup_position(total_width, total_height)
-        self.window.geometry(f"{total_width}x{total_height}+{x}+{y}")
+        self.window.geometry(f"{total_width}x{total_height}{x:+d}{y:+d}")
         
         # Display window without stealing focus
         user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
@@ -139,6 +145,14 @@ class AccentOverlay:
         else:
             self.window.withdraw()
         self.options = []
+
+    def move_above_caret(self, caret):
+        if not self.options or not caret:
+            return
+        width = self.window.winfo_width()
+        height = self.window.winfo_height()
+        x, y = position_above_caret(*caret, width, height)
+        user32.SetWindowPos(self.hwnd, ctypes.c_void_p(-1), x, y, width, height, 0x0010 | 0x0040)
 
     def is_visible(self) -> bool:
         return bool(self.options)

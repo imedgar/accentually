@@ -1,5 +1,5 @@
 """
-System Tray Icon for QuickAccent using pystray.
+System Tray Icon for Accentually using pystray.
 Provides context menu for profile switching, delay adjustment, settings dialog, and clean exit.
 """
 import os
@@ -105,7 +105,7 @@ class TrayIcon:
         )
 
         return pystray.Menu(
-            pystray.MenuItem("QuickAccent (Running)", lambda icon, item: None, enabled=False),
+            pystray.MenuItem("Accentually (Running)", lambda icon, item: None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Profiles", profiles_menu),
             pystray.MenuItem("Hold Delay", delay_menu),
@@ -117,15 +117,15 @@ class TrayIcon:
                 checked=lambda item: is_startup_enabled()
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Exit QuickAccent", handle_exit)
+            pystray.MenuItem("Exit Accentually", handle_exit)
         )
 
     def start(self):
         """Run the tray icon detached in a background thread."""
         self.icon = pystray.Icon(
-            name="QuickAccent",
+            name="Accentually",
             icon=self.image,
-            title="QuickAccent (macOS Accents for Windows)",
+            title="Accentually (macOS Accents for Windows)",
             menu=self._build_menu()
         )
         self.icon.run_detached()

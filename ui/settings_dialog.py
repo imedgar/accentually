@@ -1,5 +1,5 @@
 """
-Modern Settings Dialog for QuickAccent.
+Modern Settings Dialog for Accentually.
 Allows user to change profiles, customize hold delay, view/edit character sets,
 test accents in an interactive test field, and toggle startup with Windows.
 """
@@ -25,8 +25,8 @@ class SettingsDialog:
             return
 
         self.window = tk.Toplevel(self.root)
-        self.window.title("QuickAccent - Settings")
-        self.window.geometry("640x700")
+        self.window.title("Accentually - Settings")
+        self.window.geometry("640x750")
         self.window.minsize(580, 620)
         
         # Modern Dark Palette
@@ -64,7 +64,7 @@ class SettingsDialog:
         
         title_lbl = tk.Label(
             header,
-            text="QuickAccent",
+            text="Accentually",
             font=("Segoe UI", 18, "bold"),
             bg=self.bg_color,
             fg=self.text_color
@@ -203,6 +203,28 @@ class SettingsDialog:
         self.test_entry.pack(fill='x', ipady=4)
         self.test_entry.bind("<FocusIn>", self._clear_test_entry_placeholder)
 
+        # Options remain visible even when the mapping table is resized.
+        opts_frame = tk.Frame(content, bg=self.bg_color)
+        opts_frame.pack(fill='x', pady=4)
+
+        self.fullscreen_var = tk.BooleanVar(value=self.config_manager.pause_in_fullscreen)
+        tk.Checkbutton(
+            opts_frame, text="Pause Accentually in full-screen apps (for gaming)",
+            variable=self.fullscreen_var, font=("Segoe UI", 9),
+            bg=self.bg_color, fg=self.text_color, selectcolor="#333336",
+            activebackground=self.bg_color, activeforeground=self.text_color,
+            command=self._on_fullscreen_toggle
+        ).pack(anchor='w')
+
+        self.startup_var = tk.BooleanVar(value=is_startup_enabled())
+        tk.Checkbutton(
+            opts_frame, text="Start Accentually automatically with Windows",
+            variable=self.startup_var, font=("Segoe UI", 9),
+            bg=self.bg_color, fg=self.text_color, selectcolor="#333336",
+            activebackground=self.bg_color, activeforeground=self.text_color,
+            command=self._on_startup_toggle
+        ).pack(anchor='w')
+
         # Character Map Table Section
         map_frame = tk.LabelFrame(
             content,
@@ -232,25 +254,6 @@ class SettingsDialog:
         scrollbar.pack(side='right', fill='y')
 
         self._populate_character_table()
-
-        # Options Section
-        opts_frame = tk.Frame(content, bg=self.bg_color)
-        opts_frame.pack(fill='x', pady=4)
-
-        self.startup_var = tk.BooleanVar(value=is_startup_enabled())
-        startup_cb = tk.Checkbutton(
-            opts_frame,
-            text="Start QuickAccent automatically with Windows",
-            variable=self.startup_var,
-            font=("Segoe UI", 9),
-            bg=self.bg_color,
-            fg=self.text_color,
-            selectcolor="#333336",
-            activebackground=self.bg_color,
-            activeforeground=self.text_color,
-            command=self._on_startup_toggle
-        )
-        startup_cb.pack(anchor='w')
 
         # 3. Bottom Action Buttons
         btn_bar = tk.Frame(self.window, bg=self.bg_color, padx=20, pady=12)
@@ -303,6 +306,9 @@ class SettingsDialog:
     def _on_startup_toggle(self):
         enabled = self.startup_var.get()
         set_startup_enabled(enabled)
+
+    def _on_fullscreen_toggle(self):
+        self.config_manager.pause_in_fullscreen = self.fullscreen_var.get()
 
     def _populate_character_table(self):
         for item in self.tree.get_children():

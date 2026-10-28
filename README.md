@@ -1,8 +1,8 @@
-# QuickAccent for Windows
+# Accentually for Windows
 
 > **macOS-style character popup with 1–9 quick selection and first-class Latvian language support.**
 
-QuickAccent brings the beloved macOS press-and-hold accent menu to Windows. When you hold down a key (such as `a`, `c`, `e`, `g`, `s`, `z`), an elegant floating popup appears near your text cursor. Pressing **1–9** immediately inserts the corresponding accented character and replaces the base letter.
+Accentually brings the beloved macOS press-and-hold accent menu to Windows. When you hold down a key (such as `a`, `c`, `e`, `g`, `s`, `z`), an elegant floating popup appears near your text cursor. Pressing **1–9** immediately inserts the corresponding accented character and replaces the base letter.
 
 Built specifically to solve the frustration with PowerToys Quick Accent lacking proper Latvian language support and clumsy arrow/space cycling.
 
@@ -53,9 +53,15 @@ Every Latvian diacritic is mapped directly to **Option #1**, allowing instant, e
 
 ## 🚀 How to Run
 
+Install Python 3 and the dependencies once:
+
+```cmd
+python -m pip install -r requirements.txt
+```
+
 ### Option 1: Silent Background Mode (Recommended)
 Double-click `run_background.vbs`.  
-QuickAccent will start silently in the background with an icon in your Windows system tray.
+Accentually will start silently in the background with an icon in your Windows system tray.
 
 ### Option 2: Console / Debug Mode
 Double-click `run.bat` or run:
@@ -72,9 +78,11 @@ python quick_accent.py --settings
 
 ## ⚙️ Configuration & Profiles
 
-QuickAccent includes a visual Settings Dialog accessible from the system tray icon or by running with `--settings`.
+Accentually includes a visual Settings Dialog accessible from the system tray icon or by running with `--settings`.
 
 ### Built-in Profiles
+To avoid interrupting games, enable **Pause Accentually in full-screen apps (for gaming)** in Settings. This pauses the popup while a full-screen or borderless full-screen app is in the foreground; windowed games are not detected automatically.
+
 1. **Latvian + International (Default)**:  
    Latvian diacritics are always at `#1`, followed by common European accents (`ä`, `é`, `ü`, `ñ`, etc.).
 2. **Latvian Exclusive**:  
@@ -107,7 +115,7 @@ You can customize or add any key in `config.json`:
 
 ## 💻 Start with Windows
 
-- **From Tray / Settings**: Right-click the QuickAccent tray icon and check **Start with Windows**, or toggle the checkbox in Settings.
+- **From Tray / Settings**: Right-click the Accentually tray icon and check **Start with Windows**, or toggle the checkbox in Settings.
 - **Via Scripts**:
   - Run `install_startup.bat` to enable automatic startup.
   - Run `uninstall_startup.bat` to disable it.
