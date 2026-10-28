@@ -60,6 +60,7 @@ class AccentuallyApp:
         # Initialize Tkinter root (remains hidden as main event pump)
         self.root = tk.Tk()
         self.root.withdraw()
+        self.root.iconbitmap(os.path.join(os.path.dirname(__file__), "assets", "app_icon.ico"))
         
         # Core subsystems
         self.config_manager = ConfigManager()
