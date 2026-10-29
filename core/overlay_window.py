@@ -7,7 +7,7 @@ import tkinter as tk
 import ctypes
 from ctypes import wintypes
 from typing import List, Callable, Optional
-from core.caret_detector import get_popup_position, position_above_caret
+from core.caret_detector import get_popup_position, get_native_caret_position, position_above_caret
 
 user32 = ctypes.windll.user32
 dwmapi = ctypes.windll.dwmapi
@@ -131,12 +131,15 @@ class AccentOverlay:
         total_width = self.padding * 2 + num_cards * self.card_width + (num_cards - 1) * self.card_margin + 2
         total_height = self.padding * 2 + self.card_height + 2
         
-        x, y = get_popup_position(total_width, total_height)
+        self._popup_size = total_width, total_height
+        caret = get_native_caret_position()
+        x, y = get_popup_position(total_width, total_height, caret)
         self.window.geometry(f"{total_width}x{total_height}{x:+d}{y:+d}")
         
         # Display window without stealing focus
         user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
         user32.SetWindowPos(self.hwnd, ctypes.c_void_p(-1), x, y, total_width, total_height, 0x0010 | 0x0040) # HWND_TOPMOST | SWP_NOACTIVATE
+        return caret is not None
 
     def hide(self):
         """Hide the overlay window."""
@@ -149,8 +152,7 @@ class AccentOverlay:
     def move_above_caret(self, caret):
         if not self.options or not caret:
             return
-        width = self.window.winfo_width()
-        height = self.window.winfo_height()
+        width, height = self._popup_size
         x, y = position_above_caret(*caret, width, height)
         user32.SetWindowPos(self.hwnd, ctypes.c_void_p(-1), x, y, width, height, 0x0010 | 0x0040)
 

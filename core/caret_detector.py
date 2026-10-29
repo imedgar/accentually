@@ -4,7 +4,10 @@ Calculates the optimal screen position to display the QuickAccent popup overlay.
 Tries caret coordinates first, falling back to mouse or active window geometry.
 """
 import ctypes
+import json
+import os
 import subprocess
+import sys
 from ctypes import wintypes
 from typing import Tuple
 
@@ -79,52 +82,64 @@ def is_foreground_fullscreen():
     return (rect.left <= screen.left and rect.top <= screen.top and
             rect.right >= screen.right and rect.bottom >= screen.bottom)
 
-def get_accessible_caret_position():
-    """Ask Windows UI Automation for the focused text selection's screen bounds.
+def caret_belongs_to_window(caret, hwnd):
+    if not caret or not hwnd:
+        return False
+    x, y, height = caret
+    rect = RECT()
+    return (height > 0 and user32.GetWindowRect(hwnd, ctypes.byref(rect)) and
+            rect.left <= x <= rect.right and rect.top <= y < rect.bottom)
 
-    Some applications render their own caret and do not expose a Win32 caret.
-    Run this in a worker thread: accessibility providers can be slow or hang.
-    """
-    script = r'''
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-$e = [System.Windows.Automation.AutomationElement]::FocusedElement
-if ($null -eq $e) { exit }
-$p = $e.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern)
-if ($null -eq $p) { exit }
-$ranges = $p.GetSelection()
-if ($ranges.Count -eq 0) { exit }
-$rects = $ranges[0].GetBoundingRectangles()
-if ($rects.Count -eq 0) {
-    $range = $ranges[0].Clone()
-    $range.ExpandToEnclosingUnit([System.Windows.Automation.Text.TextUnit]::Character)
-    $rects = $range.GetBoundingRectangles()
-}
-if ($rects.Count -gt 0) {
-    $r = $rects[0]
-    Write-Output ("{0},{1},{2}" -f [int]$r.X, [int]$r.Y, [int]$r.Height)
-}
-'''
+
+def get_accessible_caret_position(hwnd=None):
+    """Query the active caret in a bounded child process, off the UI thread."""
+    hwnd = hwnd or user32.GetForegroundWindow()
+    if not hwnd:
+        return None
     try:
         result = subprocess.run(
-            ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
+            [sys.executable, os.path.join(os.path.dirname(__file__), 'accessibility_caret.py'), str(hwnd)],
             capture_output=True, text=True, timeout=2,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
-        if result.returncode == 0:
-            values = result.stdout.strip().split(',')
-            if len(values) == 3:
-                return tuple(map(int, values))
+        if result.returncode == 0 and user32.GetForegroundWindow() == hwnd:
+            values = json.loads(result.stdout)
+            if (isinstance(values, list) and len(values) == 3 and
+                    all(type(value) is int for value in values) and
+                    caret_belongs_to_window(values, hwnd)):
+                return tuple(values)
     except (OSError, ValueError, subprocess.TimeoutExpired):
         pass
     return None
 
+
+def get_native_caret_position(hwnd=None):
+    hwnd = hwnd or user32.GetForegroundWindow()
+    if not hwnd:
+        return None
+    tid = user32.GetWindowThreadProcessId(hwnd, None)
+    if not tid:
+        return None
+    gui = GUITHREADINFO()
+    gui.cbSize = ctypes.sizeof(gui)
+    if user32.GetGUIThreadInfo(tid, ctypes.byref(gui)) and gui.hwndCaret:
+        width = gui.rcCaret.right - gui.rcCaret.left
+        height = gui.rcCaret.bottom - gui.rcCaret.top
+        if height > 0:
+            point = wintypes.POINT(gui.rcCaret.left, gui.rcCaret.top)
+            if user32.ClientToScreen(gui.hwndCaret, ctypes.byref(point)):
+                caret = point.x + max(0, width) // 2, point.y, height
+                if caret_belongs_to_window(caret, hwnd):
+                    return caret
+    return None
+
 def position_above_caret(x, y, caret_height, width, height):
-    _, work_top, _, _ = get_work_area_for_point(x, y)
+    work_area = get_work_area_for_point(x, y)
+    _, work_top, _, _ = work_area
     popup_y = y - height - 10
     if popup_y < work_top + 10:
         popup_y = y + caret_height + 10
-    return clamp_to_screen(x - width // 2, popup_y, width, height)
+    return clamp_to_screen(x - width // 2, popup_y, width, height, work_area)
 
 def get_work_area_for_point(x: int, y: int) -> Tuple[int, int, int, int]:
     """Returns (left, top, right, bottom) of the display work area."""
@@ -139,14 +154,14 @@ def get_work_area_for_point(x: int, y: int) -> Tuple[int, int, int, int]:
     h = user32.GetSystemMetrics(1)
     return (0, 0, w, h)
 
-def clamp_to_screen(x: int, y: int, width: int, height: int) -> Tuple[int, int]:
-    work_left, work_top, work_right, work_bottom = get_work_area_for_point(x, y)
+def clamp_to_screen(x: int, y: int, width: int, height: int, work_area=None) -> Tuple[int, int]:
+    work_left, work_top, work_right, work_bottom = work_area or get_work_area_for_point(x, y)
     margin = 8
     clamped_x = max(work_left + margin, min(x, work_right - width - margin))
     clamped_y = max(work_top + margin, min(y, work_bottom - height - margin))
     return (int(clamped_x), int(clamped_y))
 
-def get_popup_position(popup_width: int, popup_height: int) -> Tuple[int, int]:
+def get_popup_position(popup_width: int, popup_height: int, caret=None) -> Tuple[int, int]:
     """
     Calculates the screen (x, y) for the popup.
     Priority 1: Native caret position (right above the character).
@@ -161,25 +176,9 @@ def get_popup_position(popup_width: int, popup_height: int) -> Tuple[int, int]:
         return clamp_to_screen(pt.x - (popup_width // 2), pt.y - popup_height - 12, popup_width, popup_height)
 
     # 1. Try GetGUIThreadInfo caret
-    tid = user32.GetWindowThreadProcessId(hwnd_fg, None)
-    gui = GUITHREADINFO()
-    gui.cbSize = ctypes.sizeof(GUITHREADINFO)
-    
-    if user32.GetGUIThreadInfo(tid, ctypes.byref(gui)) and gui.hwndCaret:
-        caret_w = gui.rcCaret.right - gui.rcCaret.left
-        caret_h = gui.rcCaret.bottom - gui.rcCaret.top
-        
-        # Check if caret rect is non-zero
-        if caret_w > 0 or caret_h > 0:
-            pt = wintypes.POINT(gui.rcCaret.left, gui.rcCaret.top)
-            if user32.ClientToScreen(gui.hwndCaret, ctypes.byref(pt)):
-                # Position centered above caret, or below it near the top edge.
-                x = pt.x + (caret_w // 2) - (popup_width // 2)
-                y = pt.y - popup_height - 10
-                _, work_top, _, _ = get_work_area_for_point(pt.x, pt.y)
-                if y < work_top + 10:
-                    y = pt.y + caret_h + 10
-                return clamp_to_screen(x, y, popup_width, popup_height)
+    caret = caret or get_native_caret_position(hwnd_fg)
+    if caret:
+        return position_above_caret(*caret, popup_width, popup_height)
 
     # 2. Try mouse cursor position if inside foreground window
     pt_cursor = wintypes.POINT()

@@ -14,7 +14,7 @@ from typing import Optional
 from core.key_injector import EXTRA_INFO_MAGIC, inject_replacement
 from core.config_manager import ConfigManager
 from core.overlay_window import AccentOverlay
-from core.caret_detector import get_accessible_caret_position, is_foreground_fullscreen
+from core.caret_detector import get_accessible_caret_position, get_native_caret_position, is_foreground_fullscreen
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -183,14 +183,18 @@ class KeyboardManager:
             self.currently_held_vk = None
             inject_replacement(chosen_char)
 
-        self.overlay.show(options, on_char_selected)
+        target_window = user32.GetForegroundWindow()
+        if self.overlay.show(options, on_char_selected):
+            return  # A confirmed native caret must not be overwritten by UIA.
+
         def locate_caret():
-            caret = get_accessible_caret_position()
+            caret = get_accessible_caret_position(target_window)
             self._ui_queue.put((move_if_current, (caret,)))
 
         def move_if_current(caret):
-            if self.is_popup_active and self.overlay.on_select_callback is on_char_selected:
-                self.overlay.move_above_caret(caret)
+            if (self.is_popup_active and self.overlay.on_select_callback is on_char_selected
+                    and user32.GetForegroundWindow() == target_window):
+                self.overlay.move_above_caret(get_native_caret_position(target_window) or caret)
 
         threading.Thread(target=locate_caret, daemon=True).start()
 
