@@ -8,6 +8,7 @@ import os
 from typing import Callable, Optional
 from PIL import Image, ImageDraw, ImageTk
 from core.config_manager import ConfigManager
+from core.paths import resource_path
 from core.startup_manager import is_startup_enabled, set_startup_enabled
 
 class SettingsDialog:
@@ -25,7 +26,7 @@ class SettingsDialog:
 
         self.window = tk.Toplevel(self.root)
         self.window.title("Accentually - Settings")
-        self.window.iconbitmap(os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "app_icon.ico"))
+        self.window.iconbitmap(resource_path("assets", "app_icon.ico"))
         self.window.geometry("720x790")
         self.window.minsize(640, 700)
         self.bg_color = "#313338"

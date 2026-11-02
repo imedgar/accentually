@@ -7,7 +7,7 @@ cd /d "%~dp0"
 set "VBS_PATH=%~dp0run_background.vbs"
 set "CMD_STR=wscript.exe \"%VBS_PATH%\""
 
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "QuickAccent" /t REG_SZ /d "%CMD_STR%" /f
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "Accentually" /t REG_SZ /d "%CMD_STR%" /f
 
 if %ERRORLEVEL% equ 0 (
     echo.

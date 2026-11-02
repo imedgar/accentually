@@ -11,6 +11,8 @@ import sys
 from ctypes import wintypes
 from typing import Tuple
 
+from core.paths import is_frozen
+
 user32 = ctypes.windll.user32
 
 class RECT(ctypes.Structure):
@@ -91,6 +93,13 @@ def caret_belongs_to_window(caret, hwnd):
             rect.left <= x <= rect.right and rect.top <= y < rect.bottom)
 
 
+def _caret_probe_command(hwnd):
+    if is_frozen():
+        # The frozen exe re-launches itself in probe mode (see quick_accent.main).
+        return [sys.executable, '--caret', str(hwnd)]
+    return [sys.executable, os.path.join(os.path.dirname(__file__), 'accessibility_caret.py'), str(hwnd)]
+
+
 def get_accessible_caret_position(hwnd=None):
     """Query the active caret in a bounded child process, off the UI thread."""
     hwnd = hwnd or user32.GetForegroundWindow()
@@ -98,7 +107,7 @@ def get_accessible_caret_position(hwnd=None):
         return None
     try:
         result = subprocess.run(
-            [sys.executable, os.path.join(os.path.dirname(__file__), 'accessibility_caret.py'), str(hwnd)],
+            _caret_probe_command(hwnd),
             capture_output=True, text=True, timeout=2,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )

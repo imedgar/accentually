@@ -113,6 +113,20 @@ You can customize or add any key in `config.json`:
 
 ---
 
+## 📦 Install & Updates
+
+Download `Accentually-Setup.exe` from the [latest release](https://github.com/imedgar/accentually/releases/latest) and run it. It installs per-user (no admin prompt), offers "Start with Windows", and needs no Python or project folder. Settings live in `%APPDATA%\Accentually\config.json`.
+
+**Updating:** the app checks GitHub Releases once a day (toggle via tray → *Check automatically*) and shows a notification when a newer version exists. Use tray → *Check for Updates...* / *Install update...* to download, verify (SHA-256) and install it; the app restarts itself.
+
+### Publishing a release
+
+1. Bump `__version__` in `core/version.py` and commit.
+2. `git tag v1.2.3 && git push origin v1.2.3`: the *Release* GitHub Action runs the tests, builds the installer and attaches `Accentually-Setup.exe` plus its `.sha256` to a new release.
+3. Installed clients pick it up on their next check.
+
+To build locally: `pip install -r requirements.txt -r requirements-build.txt`, install Inno Setup 6, then run `.\build.ps1` (output in `dist\`).
+
 ## 💻 Start with Windows
 
 - **From Tray / Settings**: Right-click the Accentually tray icon and check **Start with Windows**, or toggle the checkbox in Settings.

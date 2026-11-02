@@ -7,6 +7,8 @@ import pystray
 from PIL import Image
 from typing import Callable, Optional
 from core.config_manager import ConfigManager
+from core.paths import resource_path
+from core.version import __version__
 from core.startup_manager import is_startup_enabled, set_startup_enabled
 
 class TrayIcon:
@@ -14,17 +16,19 @@ class TrayIcon:
         self,
         config_manager: ConfigManager,
         on_open_settings: Callable[[], None],
-        on_exit_app: Callable[[], None]
+        on_exit_app: Callable[[], None],
+        on_check_updates: Callable[[], None] = lambda: None,
+        on_install_update: Callable[[], None] = lambda: None,
+        get_pending_update: Callable[[], Optional[str]] = lambda: None,
     ):
         self.config_manager = config_manager
         self.on_open_settings = on_open_settings
         self.on_exit_app = on_exit_app
+        self.on_check_updates = on_check_updates
+        self.on_install_update = on_install_update
+        self.get_pending_update = get_pending_update
         
-        ico_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "assets",
-            "app_icon.ico"
-        )
+        ico_path = resource_path("assets", "app_icon.ico")
         self.image = Image.open(ico_path)
         self.icon: Optional[pystray.Icon] = None
 
@@ -105,7 +109,7 @@ class TrayIcon:
         )
 
         return pystray.Menu(
-            pystray.MenuItem("Accentually (Running)", lambda icon, item: None, enabled=False),
+            pystray.MenuItem(f"Accentually {__version__} (Running)", lambda icon, item: None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Profiles", profiles_menu),
             pystray.MenuItem("Hold Delay", delay_menu),
@@ -115,6 +119,18 @@ class TrayIcon:
                 "Start with Windows",
                 toggle_startup,
                 checked=lambda item: is_startup_enabled()
+            ),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                lambda item: f"Install update {self.get_pending_update()}...",
+                lambda icon, item: self.on_install_update(),
+                visible=lambda item: bool(self.get_pending_update())
+            ),
+            pystray.MenuItem("Check for Updates...", lambda icon, item: self.on_check_updates()),
+            pystray.MenuItem(
+                "Check automatically",
+                lambda icon, item: setattr(self.config_manager, "check_updates", not self.config_manager.check_updates),
+                checked=lambda item: self.config_manager.check_updates
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Exit Accentually", handle_exit)

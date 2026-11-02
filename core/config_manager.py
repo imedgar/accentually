@@ -7,7 +7,9 @@ import os
 import copy
 from typing import Dict, List, Optional, Callable
 
-DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
+from core.paths import default_config_path
+
+DEFAULT_CONFIG_PATH = default_config_path()
 
 class ConfigManager:
     def __init__(self, config_path: str = DEFAULT_CONFIG_PATH):
@@ -24,6 +26,8 @@ class ConfigManager:
             "play_sound": False,
             "auto_capitalize": True,
             "pause_in_fullscreen": False,
+            "check_updates": True,
+            "last_update_check": 0,
             "profiles": {
                 "latvian_first": {
                     "name": "Latvian + International",
@@ -150,6 +154,24 @@ class ConfigManager:
                 cb()
             except Exception as e:
                 print(f"[ConfigManager] Listener error: {e}")
+
+    @property
+    def check_updates(self) -> bool:
+        return self.config.get("check_updates", True)
+
+    @check_updates.setter
+    def check_updates(self, enabled: bool):
+        self.config["check_updates"] = bool(enabled)
+        self.save()
+
+    @property
+    def last_update_check(self) -> float:
+        return float(self.config.get("last_update_check", 0) or 0)
+
+    @last_update_check.setter
+    def last_update_check(self, timestamp: float):
+        self.config["last_update_check"] = timestamp
+        self.save()
 
     @property
     def pause_in_fullscreen(self) -> bool:
