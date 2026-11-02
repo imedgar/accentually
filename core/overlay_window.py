@@ -133,13 +133,25 @@ class AccentOverlay:
         
         self._popup_size = total_width, total_height
         caret = get_native_caret_position()
+        if caret is None:
+            # No Win32 caret: stay hidden until the UIA probe answers (see reveal),
+            # rather than flashing at the mouse/window centre and then jumping.
+            return False
+        self._place_and_show(caret)
+        return True
+
+    def reveal(self, caret=None):
+        """Show a popup deferred by show(); falls back to mouse/window if caret is None."""
+        if self.options:
+            self._place_and_show(caret)
+
+    def _place_and_show(self, caret):
+        total_width, total_height = self._popup_size
         x, y = get_popup_position(total_width, total_height, caret)
         self.window.geometry(f"{total_width}x{total_height}{x:+d}{y:+d}")
-        
         # Display window without stealing focus
         user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
         user32.SetWindowPos(self.hwnd, ctypes.c_void_p(-1), x, y, total_width, total_height, 0x0010 | 0x0040) # HWND_TOPMOST | SWP_NOACTIVATE
-        return caret is not None
 
     def hide(self):
         """Hide the overlay window."""
@@ -152,9 +164,7 @@ class AccentOverlay:
     def move_above_caret(self, caret):
         if not self.options or not caret:
             return
-        width, height = self._popup_size
-        x, y = position_above_caret(*caret, width, height)
-        user32.SetWindowPos(self.hwnd, ctypes.c_void_p(-1), x, y, width, height, 0x0010 | 0x0040)
+        self._place_and_show(caret)
 
     def is_visible(self) -> bool:
         return bool(self.options)

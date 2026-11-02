@@ -194,7 +194,7 @@ class KeyboardManager:
         def move_if_current(caret):
             if (self.is_popup_active and self.overlay.on_select_callback is on_char_selected
                     and user32.GetForegroundWindow() == target_window):
-                self.overlay.move_above_caret(get_native_caret_position(target_window) or caret)
+                self.overlay.reveal(get_native_caret_position(target_window) or caret)
 
         threading.Thread(target=locate_caret, daemon=True).start()
 

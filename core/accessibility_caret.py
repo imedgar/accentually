@@ -44,39 +44,57 @@ def caret_from_range(text_range):
     return None
 
 
-def find_caret(automation, uia):
+def _caret_from_element(element, uia):
+    from comtypes import COMError
+    try:
+        unknown = element.GetCurrentPattern(uia.UIA_TextPattern2Id)
+        if unknown:
+            pattern = unknown.QueryInterface(uia.IUIAutomationTextPattern2)
+            active, text_range = pattern.GetCaretRange()
+            if active and text_range:
+                caret = caret_from_range(text_range)
+                if caret:
+                    return caret
+    except (COMError, OSError, ValueError):
+        pass
+    try:
+        unknown = element.GetCurrentPattern(uia.UIA_TextPatternId)
+        if unknown:
+            pattern = unknown.QueryInterface(uia.IUIAutomationTextPattern)
+            ranges = pattern.GetSelection()
+            if ranges and ranges.Length:
+                selection = ranges.GetElement(0)
+                # A selection is not a reliable indication of the caret end.
+                if selection.CompareEndpoints(0, selection, 1) == 0:
+                    return caret_from_range(selection)
+    except (COMError, OSError, ValueError):
+        pass
+    return None
+
+
+def find_caret(automation, uia, hwnd=None):
     from comtypes import COMError
     element = automation.GetFocusedElement()
     for _ in range(6):
         if not element:
             break
-        try:
-            unknown = element.GetCurrentPattern(uia.UIA_TextPattern2Id)
-            if unknown:
-                pattern = unknown.QueryInterface(uia.IUIAutomationTextPattern2)
-                active, text_range = pattern.GetCaretRange()
-                if active and text_range:
-                    caret = caret_from_range(text_range)
-                    if caret:
-                        return caret
-        except (COMError, OSError, ValueError):
-            pass
-        try:
-            unknown = element.GetCurrentPattern(uia.UIA_TextPatternId)
-            if unknown:
-                pattern = unknown.QueryInterface(uia.IUIAutomationTextPattern)
-                ranges = pattern.GetSelection()
-                if ranges and ranges.Length:
-                    selection = ranges.GetElement(0)
-                    # A selection is not a reliable indication of the caret end.
-                    if selection.CompareEndpoints(0, selection, 1) == 0:
-                        caret = caret_from_range(selection)
-                        if caret:
-                            return caret
-        except (COMError, OSError, ValueError):
-            pass
+        caret = _caret_from_element(element, uia)
+        if caret:
+            return caret
         # Web inputs sometimes expose TextPattern on a focused node's parent.
         element = automation.ControlViewWalker.GetParentElement(element)
+
+    # Hosts such as WebView2/WinUI report only their container as focused; the
+    # real edit control is a keyboard-focused descendant of the window.
+    if hwnd:
+        try:
+            root = automation.ElementFromHandle(ctypes.c_void_p(hwnd))
+            condition = automation.CreatePropertyCondition(30008, True)  # HasKeyboardFocus
+            focused = root.FindFirst(4, condition)  # TreeScope_Descendants
+            if focused:
+                return _caret_from_element(focused, uia)
+        except (COMError, OSError, ValueError):
+            pass
     return None
 
 
@@ -95,12 +113,12 @@ def main():
     from comtypes.client import CreateObject, GetModule
     uia = GetModule('UIAutomationCore.dll')
     automation = CreateObject(uia.CUIAutomation, interface=uia.IUIAutomation)
-    for delay in (0, .04, .1):
+    for delay in (0, .05, .15, .3, .5):
         time.sleep(delay)
         if user32.GetForegroundWindow() != expected_window:
             return
         try:
-            caret = find_caret(automation, uia)
+            caret = find_caret(automation, uia, expected_window)
         except (COMError, OSError, ValueError):
             caret = None
         if caret and user32.GetForegroundWindow() == expected_window:
