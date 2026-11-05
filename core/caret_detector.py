@@ -45,6 +45,8 @@ class MONITORINFO(ctypes.Structure):
     ]
 
 MONITOR_DEFAULTTONEAREST = 2
+GWL_STYLE = -16
+WS_CAPTION = 0x00C00000
 
 # Window and monitor handles are pointer-sized on 64-bit Windows.
 user32.GetForegroundWindow.restype = wintypes.HWND
@@ -64,13 +66,19 @@ user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
 user32.MonitorFromWindow.restype = wintypes.HANDLE
 user32.IsZoomed.argtypes = [wintypes.HWND]
 user32.IsZoomed.restype = wintypes.BOOL
+user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+user32.GetWindowLongW.restype = wintypes.LONG
 user32.GetDesktopWindow.restype = wintypes.HWND
 user32.GetShellWindow.restype = wintypes.HWND
 
 def is_foreground_fullscreen():
     """Detect a non-maximized window covering its monitor, including borderless games."""
     hwnd = user32.GetForegroundWindow()
-    if not hwnd or hwnd in (user32.GetDesktopWindow(), user32.GetShellWindow()) or user32.IsZoomed(hwnd):
+    if not hwnd or hwnd in (user32.GetDesktopWindow(), user32.GetShellWindow()):
+        return False
+    # Games like WoW in "Windowed (Maximized)" mode are flagged as zoomed, so only a
+    # zoomed window that still has a title bar (a regular maximized app) is excluded.
+    if user32.IsZoomed(hwnd) and (user32.GetWindowLongW(hwnd, GWL_STYLE) & WS_CAPTION) == WS_CAPTION:
         return False
     rect = RECT()
     if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
