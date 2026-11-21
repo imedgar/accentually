@@ -31,7 +31,7 @@ Run from the repository root on Windows. CI uses Python 3.13.
 
 ## Principles
 
-This repo follows [groundwork](https://github.com/imedgar/groundwork/blob/main/PRINCIPLES.md). Cloud agents, CI and collaborators may not have it loaded, so these are the rules that matter most here:
+This repo follows [ebbdeck](https://github.com/imedgar/ebbdeck/blob/main/PRINCIPLES.md). Cloud agents, CI and collaborators may not have it loaded, so these are the rules that matter most here:
 - Work on a branch and open a PR; never push to main. Never commit secrets.
 - Do what was asked, and only that, with the smallest change that solves it.
 - Done means checked: run the test and lint commands above and report what actually happened, including failures.
